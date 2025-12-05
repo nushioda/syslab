@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スイッチポート管理</title>
+  <style>
+    :root {
+      font-family: "Segoe UI", sans-serif;
+      color: #111;
+      background: #f7f7fb;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #1c3659;
+      color: #fff;
+      padding: 16px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    p.desc { margin: 0; opacity: 0.85; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; }
+    th { background: #eef2f7; }
+    tr:nth-child(even) { background: #fafbff; }
+    tr + tr td { border-top: 1px solid #e5e8ee; }
+    input, select, button, textarea {
+      font: inherit;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #c7cdd8;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    input[type="checkbox"] { width: auto; }
+    button {
+      background: #1c3659;
+      color: #fff;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+    }
+    button.secondary { background: #eef2f7; color: #1c3659; border: 1px solid #c7cdd8; }
+    button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.12); }
+    .actions { display: flex; gap: 8px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .tag { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #eef2f7; font-size: 12px; }
+    .lag { color: #1c7c3d; font-weight: 600; }
+    .error { color: #c1121f; margin-top: 8px; }
+    @media (max-width: 640px) {
+      th:nth-child(1), td:nth-child(1) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>スイッチポート管理</h1>
+    <p class="desc">ラック内スイッチのポート情報をブラウザから素早く編集できます。</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>新規ポートを追加</h2>
+      <form id="create-form" class="form-grid">
+        <label>ポート番号<input name="portNumber" required></label>
+        <label>利用ホスト名<input name="hostname" required></label>
+        <label>VLAN情報<input name="vlan" required placeholder="例: VLAN10 (Production)"></label>
+        <label>ポート種別<select name="portType"><option value="Access">アクセスポート</option><option value="Trunk">トランクポート</option></select></label>
+        <label style="display:flex;align-items:center;gap:8px;">LAG<input type="checkbox" name="lag"></label>
+        <div class="actions" style="align-self:end;">
+          <button type="submit">追加</button>
+          <button type="reset" class="secondary">クリア</button>
+        </div>
+      </form>
+      <div id="create-error" class="error" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <h2>ポート一覧</h2>
+      <div style="overflow-x:auto;">
+        <table aria-label="ポート一覧">
+          <thead>
+            <tr><th>ID</th><th>ポート番号</th><th>利用ホスト名</th><th>VLAN情報</th><th>ポート種別</th><th>LAG</th><th>操作</th></tr>
+          </thead>
+          <tbody id="port-body"></tbody>
+        </table>
+      </div>
+      <div id="list-error" class="error" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    const portBody = document.getElementById('port-body');
+    const listError = document.getElementById('list-error');
+    const createForm = document.getElementById('create-form');
+    const createError = document.getElementById('create-error');
+
+    async function fetchPorts() {
+      listError.textContent = '';
+      try {
+        const res = await fetch('/api/ports');
+        if (!res.ok) throw new Error('読み込みに失敗しました');
+        const data = await res.json();
+        renderPorts(data.ports || []);
+      } catch (err) {
+        listError.textContent = err.message;
+      }
+    }
+
+    function renderPorts(ports) {
+      portBody.innerHTML = '';
+      ports.forEach(port => portBody.appendChild(createRow(port)));
+    }
+
+    function createRow(port) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${port.id}</td>
+        <td><input value="${port.portNumber || ''}" data-field="portNumber"></td>
+        <td><input value="${port.hostname || ''}" data-field="hostname"></td>
+        <td><input value="${port.vlan || ''}" data-field="vlan"></td>
+        <td>
+          <select data-field="portType">
+            <option value="Access" ${port.portType === 'Access' ? 'selected' : ''}>アクセスポート</option>
+            <option value="Trunk" ${port.portType === 'Trunk' ? 'selected' : ''}>トランクポート</option>
+          </select>
+        </td>
+        <td style="text-align:center;"><input type="checkbox" data-field="lag" ${port.lag ? 'checked' : ''}></td>
+        <td class="actions">
+          <button type="button" data-action="save">保存</button>
+          <button type="button" class="secondary" data-action="delete">削除</button>
+        </td>
+      `;
+
+      tr.querySelector('[data-action="save"]').addEventListener('click', async () => {
+        const payload = collectRowData(tr);
+        await updatePort(port.id, payload);
+      });
+      tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+        if (confirm(`ポート ${port.portNumber} を削除しますか？`)) {
+          await deletePort(port.id);
+        }
+      });
+      return tr;
+    }
+
+    function collectRowData(tr) {
+      return {
+        portNumber: tr.querySelector('[data-field="portNumber"]').value.trim(),
+        hostname: tr.querySelector('[data-field="hostname"]').value.trim(),
+        vlan: tr.querySelector('[data-field="vlan"]').value.trim(),
+        portType: tr.querySelector('[data-field="portType"]').value,
+        lag: tr.querySelector('[data-field="lag"]').checked,
+      };
+    }
+
+    async function updatePort(id, payload) {
+      listError.textContent = '';
+      try {
+        const res = await fetch(`/api/ports/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('更新に失敗しました');
+        await fetchPorts();
+      } catch (err) {
+        listError.textContent = err.message;
+      }
+    }
+
+    async function deletePort(id) {
+      listError.textContent = '';
+      try {
+        const res = await fetch(`/api/ports/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('削除に失敗しました');
+        await fetchPorts();
+      } catch (err) {
+        listError.textContent = err.message;
+      }
+    }
+
+    createForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      createError.textContent = '';
+      const formData = new FormData(createForm);
+      const payload = {
+        portNumber: formData.get('portNumber').trim(),
+        hostname: formData.get('hostname').trim(),
+        vlan: formData.get('vlan').trim(),
+        portType: formData.get('portType'),
+        lag: formData.get('lag') === 'on'
+      };
+      try {
+        const res = await fetch('/api/ports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('追加に失敗しました');
+        createForm.reset();
+        await fetchPorts();
+      } catch (err) {
+        createError.textContent = err.message;
+      }
+    });
+
+    fetchPorts();
+  </script>
+</body>
+</html>

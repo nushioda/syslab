@@ -1,0 +1,26 @@
+[
+  {
+    "id": "p1",
+    "portNumber": "1",
+    "hostname": "srv-web-01",
+    "vlan": "VLAN10 (Production)",
+    "portType": "Access",
+    "lag": false
+  },
+  {
+    "id": "p2",
+    "portNumber": "2",
+    "hostname": "srv-backup-01",
+    "vlan": "VLAN20 (Backup)",
+    "portType": "Access",
+    "lag": false
+  },
+  {
+    "id": "p3",
+    "portNumber": "3",
+    "hostname": "core-switch",
+    "vlan": "Trunk (10,20,30)",
+    "portType": "Trunk",
+    "lag": true
+  }
+]
